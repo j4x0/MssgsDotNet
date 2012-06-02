@@ -44,11 +44,18 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppCredentials.cs" />
+    <Compile Include="Commands\ConversationInfoCommand.cs" />
     <Compile Include="Commands\CredentialsCommand.cs" />
     <Compile Include="IMssgsCommand.cs" />
+    <Compile Include="MssgsConversation.cs" />
+    <Compile Include="MssgsResponse.cs" />
     <Compile Include="MssgsApiException.cs" />
     <Compile Include="MssgsClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RawMssgsResponse.cs" />
+    <Compile Include="Responses\ConversationInfoResponse.cs" />
+    <Compile Include="Responses\CredentialsResponse.cs" />
+    <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -5,16 +5,16 @@ using System.Text;
 
 namespace MssgsDotNet
 {
-    struct AppCredentials
+    public struct AppCredentials
     {
-        private string ID { get; set; }
+        public string id;
 
-        private string Secret { get; set; }
+        public string secret;
 
-        public AppCredentials()
+        public AppCredentials(string id, string secret)
         {
-            this.ID = "";
-            this.Secret = "";
+            this.id = id;
+            this.secret = secret;
         }
     }
 }

@@ -5,12 +5,11 @@ using System.Text;
 
 namespace MssgsDotNet
 {
-    public interface IMssgsCommand<T>
+    public interface IMssgsCommand<T> where T : MssgsResponse
     {
-        public string Method { get; set; }
+        string Method { get; set; }
 
-        public Dictionary<string, T> Data { get; set; }
+        T CreateResponse(string method, Dictionary<string, string> data);
     }
 
-    public interface IMssgsCommand : IMssgsCommand<string> { }
 }
