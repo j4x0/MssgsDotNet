@@ -13,9 +13,7 @@ namespace MssgsDotNet
     {
         public static readonly string MSSGS_API_URI = "ws://api.mss.gs:8101";
 
-
         private AppCredentials appCreds;
-
         public AppCredentials AppCreds
         {
             get
@@ -24,24 +22,27 @@ namespace MssgsDotNet
             }
             set
             {
-                var response = this.ExecuteMssgsCommand(new CredentialsCommand(value));
-                if (!response.Valid)
-                    throw new MssgsApiException("Credentials invalid");
+                this.ExecuteMssgsCommand(new CredentialsCommand(value), (CredentialsVerification ver) =>
+                {
+                    if (!ver.Valid)
+                    {
+                        this.AppAuthenticated = false;
+                        throw new MssgsApiException("Credentials invalid");
+                    }
+                    else
+                        this.AppAuthenticated = true;
+                });
                 this.appCreds = value;
-                this.AppAuthenticated = true;
             }
         }
-
         public bool AppAuthenticated { get; private set; }
 
-
         public bool InConversation { get; private set; }
-
         public MssgsConversation Conversation { get; private set; }
 
+        private Dictionary<string, Func<RawMssgsResponse, MssgsResponse>> factoryMethods;
 
         private string name;
-
         public string Name
         {
             get
@@ -56,21 +57,21 @@ namespace MssgsDotNet
             }
         }
 
+        public delegate void ResponseReceivedHandler(MssgsResponse resp);
+        public event ResponseReceivedHandler ResponseReceived;
 
-        public delegate void MssgsDataReceivedHandler(RawMssgsResponse resp);
+        public delegate void AsyncCallback<T>(T obj);
 
-        public event MssgsDataReceivedHandler MssgsDataReceived;
-
-
-        public MssgsClient(string mssgsApiUri, AppCredentials appCreds) : base(mssgsApiUri)
+        public MssgsClient(string mssgsApiUri, AppCredentials appCreds, string name) : base(mssgsApiUri)
         {
             this.AppAuthenticated = false;
             this.MessageReceived += new EventHandler<MessageReceivedEventArgs>(this.HandleIncomingData);
+            this.factoryMethods = new Dictionary<string, Func<RawMssgsResponse, MssgsResponse>>();
+            this.Name = name;
         }
 
-        public MssgsClient(AppCredentials appCreds) : this(MssgsClient.MSSGS_API_URI, appCreds)
-        {
-        }
+        public MssgsClient(AppCredentials appCreds) : this(MssgsClient.MSSGS_API_URI, appCreds, String.Empty) { }
+        public MssgsClient(AppCredentials appCreds, string name) : this(MssgsClient.MSSGS_API_URI, appCreds, name) { } 
 
         private void HandleIncomingData(object sender, MessageReceivedEventArgs args)
         {
@@ -79,29 +80,46 @@ namespace MssgsDotNet
             var data = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(args.Message);
             data.AssureHas("method");
             data.AssureHas("data");
-            if (this.MssgsDataReceived != null)
-                this.MssgsDataReceived(
-                    new RawMssgsResponse
-                    {
-                        Method = (string)data["method"],
-                        Data = (IDictionary<string, string>)data["data"]
-                    }
-                    );
+            this.DispatchResponse(
+                new RawMssgsResponse
+                {
+                    Method = (string)data["method"],
+                    Data = (IDictionary<string, string>)data["data"]
+                }
+                );
         }
 
-        public T ExecuteMssgsCommand<T>(IMssgsCommand<T> command) where T : MssgsResponse
+        public void ExecuteMssgsCommand<T>(IMssgsCommand<T> command, AsyncCallback<T> callback) where T : MssgsResponse
         {
-            return command.CreateResponse(null, null);
+            this.UnregisterResponseFactory(command.Method);
+            this.RegisterResponseFactory<T>(command.Method, command.CreateResponse);
+            this.ResponseReceived += (MssgsResponse response) =>
+            {
+                if (command.Method != response.Method) return;
+                this.UnregisterResponseFactory(command.Method);
+                callback((T)response);
+            };
         }
 
-        public void JoinConversation(MssgsConversation conversation)
+        private void DispatchResponse(RawMssgsResponse rawResponse)
         {
+            if (!this.factoryMethods.ContainsKey(rawResponse.Method) || this.ResponseReceived == null)
+                return;
+            
+            this.ResponseReceived(this.factoryMethods[rawResponse.Method].Invoke(rawResponse));
         }
 
-        public void JoinConversation(MssgsConversation conversation, string name)
+        public void RegisterResponseFactory<T>(string methodName, Func<RawMssgsResponse, T> factory) where T : MssgsResponse
         {
-            this.Name = name;
-            this.JoinConversation(conversation);
+            if(this.factoryMethods.ContainsKey(methodName))
+                throw new Exception("There is already a factory method registered for response \"" + methodName  + "\"");
+            this.factoryMethods[methodName] = factory;
+        }
+
+        public void UnregisterResponseFactory(string methodName)
+        {
+            this.factoryMethods.AssureHas(methodName);
+            this.factoryMethods.Remove(methodName);
         }
     }
 }

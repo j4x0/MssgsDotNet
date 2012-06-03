@@ -53,8 +53,8 @@
     <Compile Include="MssgsClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RawMssgsResponse.cs" />
-    <Compile Include="Responses\ConversationInfoResponse.cs" />
-    <Compile Include="Responses\CredentialsResponse.cs" />
+    <Compile Include="Responses\ConversationInfo.cs" />
+    <Compile Include="Responses\CredentialsVerification.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup />

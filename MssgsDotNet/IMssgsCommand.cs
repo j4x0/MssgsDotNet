@@ -9,7 +9,7 @@ namespace MssgsDotNet
     {
         string Method { get; set; }
 
-        T CreateResponse(string method, Dictionary<string, string> data);
+        T CreateResponse(RawMssgsResponse rawResponse);
     }
 
 }

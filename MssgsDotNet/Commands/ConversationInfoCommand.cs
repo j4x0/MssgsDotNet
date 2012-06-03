@@ -6,7 +6,7 @@ using MssgsDotNet.Responses;
 
 namespace MssgsDotNet.Commands
 {
-    class ConversationInfoCommand : IMssgsCommand<ConversationInfoResponse>
+    class ConversationInfoCommand : IMssgsCommand<ConversationInfo>
     {
         public ConversationInfoCommand(string conversationId)
         {

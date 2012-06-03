@@ -6,7 +6,7 @@ using MssgsDotNet.Responses;
 
 namespace MssgsDotNet.Commands
 {
-    public class CredentialsCommand : IMssgsCommand<CredentialsResponse>
+    public class CredentialsCommand : IMssgsCommand<CredentialsVerification>
     {
         private AppCredentials creds;
 
@@ -18,9 +18,10 @@ namespace MssgsDotNet.Commands
             this.Method = "credentials";
         }
 
-        public CredentialsResponse CreateResponse(string method, Dictionary<string, string> data)
+        public CredentialsVerification CreateResponse(RawMssgsResponse rawResponse)
         {
-            return new CredentialsResponse(method, data);
+            rawResponse.Data.AssureHas("valid");
+            return new CredentialsVerification(Convert.ToBoolean(rawResponse.Data["valid"]));
         }
     }
 }
