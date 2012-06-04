@@ -8,14 +8,16 @@ namespace MssgsDotNet.Commands
 {
     public class CredentialsCommand : IMssgsCommand<CredentialsVerification>
     {
-        private AppCredentials creds;
-
         public string Method { get; set; }
+
+        public Dictionary<string, string> Data { get; set; }
 
         public CredentialsCommand(AppCredentials appCreds)
         {
-            this.creds = appCreds;
             this.Method = "credentials";
+            this.Data = new Dictionary<string, string>();
+            this.Data["id"] = appCreds.id;
+            this.Data["secret"] = appCreds.secret;
         }
 
         public CredentialsVerification CreateResponse(RawMssgsResponse rawResponse)

@@ -17,7 +17,7 @@ namespace MssgsDotNet
 
         public MssgsConversation(MssgsClient client, string conversationId)
         {
-            client.ExecuteMssgsCommand(new ConversationInfoCommand(conversationId), (ConversationInfo cInfo) =>
+            client.ExecuteCommand(new ConversationInfoCommand(conversationId), (ConversationInfo cInfo) =>
                 {
                     this.Info = cInfo;
                 }
