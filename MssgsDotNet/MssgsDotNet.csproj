@@ -46,6 +46,7 @@
     <Compile Include="AppCredentials.cs" />
     <Compile Include="Commands\ConversationInfoCommand.cs" />
     <Compile Include="Commands\CredentialsCommand.cs" />
+    <Compile Include="Commands\JoinConversationCommand.cs" />
     <Compile Include="IMssgsCommand.cs" />
     <Compile Include="MssgsConversation.cs" />
     <Compile Include="MssgsResponse.cs" />
@@ -56,6 +57,8 @@
     <Compile Include="RawMssgsResponse.cs" />
     <Compile Include="Responses\ConversationInfo.cs" />
     <Compile Include="Responses\CredentialsVerification.cs" />
+    <Compile Include="Responses\UsernameInfo.cs" />
+    <Compile Include="Responses\WelcomeMessage.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup />

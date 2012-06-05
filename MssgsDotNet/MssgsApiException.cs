@@ -5,7 +5,7 @@ using System.Text;
 
 namespace MssgsDotNet
 {
-    class MssgsApiException : Exception
+    public class MssgsApiException : Exception
     {
         public MssgsApiException() : base() { }
 
