@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using WebSocket4Net;
 using MssgsDotNet.Commands;
 using MssgsDotNet.Responses;
 using SimpleJson;
@@ -11,6 +10,7 @@ using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Threading;
 using System.IO;
+using System.Globalization;
 
 namespace MssgsDotNet
 {
@@ -21,9 +21,6 @@ namespace MssgsDotNet
 
         public AppCredentials AppCreds { get; private set; }
         public bool IsAuthenticated { get; private set; }
-
-        public MssgsConversation Conversation { get; private set; }
-        public bool InConversation { get; private set; }
 
         private Dictionary<string, Func<RawMssgsResponse, MssgsResponse>> factoryMethods;
 
@@ -45,8 +42,8 @@ namespace MssgsDotNet
         public delegate void ResponseReceivedHandler(MssgsResponse resp);
         public event ResponseReceivedHandler ResponseReceived;
 
-        private int port;
-        private string host;
+        public int Port { get; private set; }
+        public string Host { get; private set; }
 
         private Queue<string> OutgoingData;
         private PacketBuilder currentPacket;
@@ -59,7 +56,11 @@ namespace MssgsDotNet
         public event Handler Authenticated;
         public event Handler Connected;
         public event Handler<WelcomeMessage> Welcomed;
+        public event Handler<MssgsConversation> ConversationJoined;
+        public event Handler<MssgsMessage> MessageReceived;
 
+        public MssgsConversation Conversation { get; private set; }
+        public bool InConversation { get; private set; }
         public bool IsConnected { get; private set; }
         public bool IsWelcomed { get; private set; }
 
@@ -71,8 +72,9 @@ namespace MssgsDotNet
             this.factoryMethods = new Dictionary<string, Func<RawMssgsResponse, MssgsResponse>>();
             this.Name = name;
             this.OutgoingData = new Queue<string>();
-            this.host = mssgsApiHost;
-            this.port = mssgsApiPort;
+            this.Host = mssgsApiHost;
+            this.Port = mssgsApiPort;
+
             this.RegisterResponseFactory<WelcomeMessage>("welcome", (RawMssgsResponse response) =>
                 {
                     response.Data.AssureHas("socketAPI");
@@ -82,27 +84,77 @@ namespace MssgsDotNet
                 }
             );
 
-            this.ResponseReceived += (MssgsResponse response) =>
+            
+            this.RegisterResponseFactory<MessagesList>("messages", (RawMssgsResponse rawResponse) =>
                 {
-                    if (response.Method == "welcome")
+                    List<object> messagesraw = (List<object>)SimpleJson.SimpleJson.DeserializeObject(rawResponse.Data["0"]);
+                    var messages = new List<MssgsMessage>();
+
+                    foreach (object message in messagesraw)
                     {
-                        this.IsWelcomed = true;
-                        if (this.Welcomed != null)
-                            this.Welcomed((WelcomeMessage) response);
+                        var rawMessage = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(message.ToString());
+                        var msg = MssgsMessage.Parse(
+                            rawMessage.ToDictionary(k => k.Key.ToString(), k => k.Value != null ? k.Value.ToString() : ""),
+                            false
+                            );
+                        messages.Add(msg);
                     }
-                };
+                    return new MessagesList(messages);
+                }
+            );
+
+            this.RegisterResponseFactory<MssgsMessage>("message", (RawMssgsResponse rawResponse) =>
+                {
+                    return MssgsMessage.Parse(rawResponse.Data, true);
+                }
+            );
+
+            this.ResponseReceived += (MssgsResponse response) =>
+            {
+                if (response.Method == "welcome")
+                {
+                    this.IsWelcomed = true;
+                    if (this.Welcomed != null)
+                        this.Welcomed((WelcomeMessage)response);
+                }
+                else if (response.Method == "messages")
+                {
+                    var list = (MessagesList)response;
+                    if (this.MessageReceived != null)
+                    {
+                        foreach (var message in list.Messages)
+                        {
+                            if (this.InConversation)
+                                this.Conversation.AddMessage(message);
+                            this.MessageReceived(message);
+                        }
+                    }
+
+                }
+                if (response.Method == "message")
+                {
+                    var msg = (MssgsMessage)response;
+                    if (this.InConversation)
+                        this.Conversation.AddMessage(msg);
+                    if (this.MessageReceived != null)
+                        this.MessageReceived(msg);
+                }
+            };
         }
 
         public MssgsClient() : this(MssgsClient.MSSGS_API_URI, MssgsClient.MSSGS_API_PORT, String.Empty) { }
         public MssgsClient(string name) : this(MssgsClient.MSSGS_API_URI, MssgsClient.MSSGS_API_PORT, name) { }
 
-        public void Start()
+
+        public void Open()
         {
+            if (this.IsConnected)
+                throw new Exception("This client is already connected to the server!");
             this.clientThread = new Thread(() =>
                 {
                     using (TcpClient client = new TcpClient())
                     {
-                        client.Connect(this.host, this.port);
+                        client.Connect(this.Host, this.Port);
                         this.IsConnected = true;
                         if (this.Connected != null)
                             this.Connected();
@@ -116,24 +168,17 @@ namespace MssgsDotNet
                                         {
                                           while(!this.stop && client.Connected)
                                           {
-
-                                              Console.WriteLine("read");
                                               string incoming = reader.ReadLine();
-                                              Console.WriteLine("block ");
                                               if (incoming != null )
                                               {
-
-                                        
-                                                  if (incoming.StartsWith("length"))
-                                                      this.currentPacket = new PacketBuilder(Convert.ToInt32(incoming.Replace("length:", "").Trim()));
-                                                  else if (this.currentPacket != null)
+                                                  if (this.currentPacket == null && incoming.StartsWith("{"))
+                                                      this.currentPacket = new PacketBuilder();
+                                                  if (this.currentPacket != null)
                                                       this.currentPacket.Append(incoming);
 
                                                   if (this.currentPacket != null && this.currentPacket.Built())
                                                   {
-                                                      var data = this.currentPacket.Packet;
-                                                      this.HandleIncomingData(data);
-                                                      this.currentPacket = null;
+                                                      this.HandleIncomingData(this.currentPacket.Packet);
                                                       this.currentPacket = null;
                                                   }
                                                }
@@ -146,15 +191,13 @@ namespace MssgsDotNet
                                         if (this.OutgoingData.Count > 0)
                                         {
                                             var str = this.OutgoingData.Dequeue();
-
-                                            var data = "length: " + str.Length + "\r\n" + str + "\r\n\r\n";
+                                            var data =  str + ";";
                                             writer.Write(data);
                                             writer.Flush();
-                                            Console.WriteLine("<< " + data);
+                                            //Console.WriteLine("<< " + data);
                                         }
                                     }
                                     readThread.Abort();
-                                    Console.WriteLine("died");
                                 }
                             }
                         }
@@ -186,18 +229,29 @@ namespace MssgsDotNet
 
         private void HandleIncomingData(string data)
         {
-            Console.WriteLine(">> " + data);
+            //Console.WriteLine(">> " + data);
             if (data.IsFrikkinEmpty()) return;
             
             var obj = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(data);
             obj.AssureHas("method");
             obj.AssureHas("data");
-            var dataDic = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(obj["data"].ToString());
+
+            IDictionary<string, string> dataDic = null;
+            try
+            {
+                var list = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(obj["data"].ToString().Replace("null","\"\""));
+                dataDic = list.ToDictionary(k => k.Key.ToString(), k => k.Value.ToString());
+            }
+            catch
+            {
+                dataDic = new Dictionary<string, string>();
+                dataDic["0"] = obj["data"].ToString();
+            }
             this.DispatchResponse(
                 new RawMssgsResponse
                 {
                     Method = (string)obj["method"],
-                    Data = dataDic.ToDictionary(k => k.Key.ToString(), k => k.Value.ToString())
+                    Data = dataDic
                 }
                 );
         }
@@ -223,13 +277,26 @@ namespace MssgsDotNet
             };
         }
 
+        public void ExecuteCommand(IMssgsCommand command)
+        {
+            if (!this.IsConnected)
+                throw new Exception("Please connect first before you execute commands!");
+            if (!this.IsWelcomed)
+                throw new Exception("The server needs to welcome you first before you can execute commands!");
+            var jsonObject = new Dictionary<string, object>();
+            jsonObject["method"] = command.Method;
+            jsonObject["data"] = command.Data;
+            string json = SimpleJson.SimpleJson.SerializeObject(jsonObject);
+            this.OutgoingData.Enqueue(json);
+        }
+
         private void DispatchResponse(RawMssgsResponse rawResponse)
         {
             if (!this.factoryMethods.ContainsKey(rawResponse.Method) || this.ResponseReceived == null)
                 return;
             var response = this.factoryMethods[rawResponse.Method].Invoke(rawResponse);
-            response.Method = rawResponse.Method;
             if (response == null) return;
+            response.Method = rawResponse.Method;    
             this.ResponseReceived(response);
         }
 
@@ -271,8 +338,11 @@ namespace MssgsDotNet
                         throw new MssgsApiException("This username is already being used!");
                     if (!info.Valid)
                         throw new MssgsApiException("This username isn't valid!");
+                    this.Name = info.Username;
                     this.InConversation = true;
                     this.Conversation = conversation;
+                    if (this.ConversationJoined != null)
+                        this.ConversationJoined(conversation);
                 }
             );
         }
@@ -281,6 +351,18 @@ namespace MssgsDotNet
         {
             this.Name = name;
             this.Join(conversation);
+        }
+
+        public void Send(MssgsMessage message)
+        {
+            this.ExecuteCommand(new SendMessageCommand(message));
+        }
+
+        public void Send(string message)
+        {
+            if (!this.InConversation)
+                throw new Exception("You're not in a conversation!");
+            this.Send(new MssgsMessage(message, this.Conversation.Id));
         }
     }
 }

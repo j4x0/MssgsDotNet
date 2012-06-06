@@ -38,17 +38,16 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="WebSocket4Net">
-      <HintPath>..\..\..\..\.NET libraries\WebSocket4Net(0.6).Binaries\net40\WebSocket4Net.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppCredentials.cs" />
     <Compile Include="Commands\ConversationInfoCommand.cs" />
     <Compile Include="Commands\CredentialsCommand.cs" />
     <Compile Include="Commands\JoinConversationCommand.cs" />
+    <Compile Include="Commands\SendMessageCommand.cs" />
     <Compile Include="IMssgsCommand.cs" />
     <Compile Include="MssgsConversation.cs" />
+    <Compile Include="MssgsMessage.cs" />
     <Compile Include="MssgsResponse.cs" />
     <Compile Include="MssgsApiException.cs" />
     <Compile Include="MssgsClient.cs" />
@@ -57,8 +56,10 @@
     <Compile Include="RawMssgsResponse.cs" />
     <Compile Include="Responses\ConversationInfo.cs" />
     <Compile Include="Responses\CredentialsVerification.cs" />
+    <Compile Include="Responses\MessagesList.cs" />
     <Compile Include="Responses\UsernameInfo.cs" />
     <Compile Include="Responses\WelcomeMessage.cs" />
+    <Compile Include="SimpleJson.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup />

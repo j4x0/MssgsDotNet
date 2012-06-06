@@ -14,4 +14,10 @@ namespace MssgsDotNet
         T CreateResponse(RawMssgsResponse rawResponse);
     }
 
+    public interface IMssgsCommand
+    {
+        string Method { get; set; }
+
+        Dictionary<string, string> Data { get; set; }
+    }
 }

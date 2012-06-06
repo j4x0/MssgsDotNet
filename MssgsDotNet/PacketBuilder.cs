@@ -9,11 +9,11 @@ namespace MssgsDotNet
     {
         public string Packet { get; private set; }
 
-        public int Length { get; private set; }
+        //public int Length { get; private set; }
 
-        public PacketBuilder(int length)
+        public PacketBuilder()
         {
-            this.Length = length;
+            //this.Length = length;
             this.Packet = "";
         }
 
@@ -21,8 +21,8 @@ namespace MssgsDotNet
         {
             if (this.Built())
                 throw new Exception("This packet is built already!");
-            if (str.StartsWith("length"))
-                throw new Exception("New packet discovered while building a packet!");
+            //if (str.StartsWith("length"))
+            //    throw new Exception("New packet discovered while building a packet!");
             var filtered = this.Filter(str).Trim();
             if (filtered.IsFrikkinEmpty()) return;
             this.Packet += filtered;
@@ -35,7 +35,20 @@ namespace MssgsDotNet
 
         public bool Built()
         {
-            return (this.Length == this.Packet.Length);
+            try
+            {
+                SimpleJson.SimpleJson.DeserializeObject(this.Packet);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public override string ToString()
+        {
+            return this.Packet;
         }
     }
 }
