@@ -453,11 +453,11 @@ namespace MssgsDotNet
             GC.SuppressFinalize(this);
         }
 
-        public void Join(MssgsConversation conversation)
+        public void Join(string conversationId)
         {
             if (this.InConversation)
                 throw new Exception("Already in conversation!");
-            this.ExecuteCommand(new JoinConversationCommand(conversation.Id, this.Name), 
+            this.ExecuteCommand(new JoinConversationCommand(conversationId, this.Name), 
                 (UsernameInfo info) =>
                     {
                         if (info.Used)
@@ -466,24 +466,18 @@ namespace MssgsDotNet
                             throw new MssgsApiException("This username isn't valid!");
                         this.Name = info.Username;
                         this.InConversation = true;
-                        this.Conversation = conversation;
+                        this.Conversation = new MssgsConversation(conversationId);
                         if (this.ConversationJoined != null)
-                            this.ConversationJoined(conversation);
+                            this.ConversationJoined(this.Conversation);
                     }
             );
         }
 
-        public void Join(MssgsConversation conversation, string name)
+        public void Join(string conversationId, string name)
         {
             this.Name = name;
-            this.Join(conversation);
+            this.Join(conversationId);
         }
-
-        public void Join(string conversationId)
-        {
-            this.Join(new MssgsConversation(conversationId));
-        }
-
 
 
         public void Send(MssgsMessage message)
