@@ -21,13 +21,10 @@ namespace MssgsDotNet.Commands
 
         public ConversationInfo CreateResponse(RawMssgsResponse rawResponse)
         {
-            rawResponse.Data.AssureHas("readonly");
-            rawResponse.Data.AssureHas("exists");
-            rawResponse.Data.AssureHas("password");
             return new ConversationInfo(
-                Convert.ToBoolean(rawResponse.Data["password"]),
-                Convert.ToBoolean(rawResponse.Data["readonly"]),
-                Convert.ToBoolean(rawResponse.Data["password"])
+                Convert.ToBoolean(rawResponse["password"]),
+                Convert.ToBoolean(rawResponse["readonly"]),
+                Convert.ToBoolean(rawResponse["password"])
             );
         }
     }

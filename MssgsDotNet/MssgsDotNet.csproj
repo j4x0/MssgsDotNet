@@ -46,14 +46,17 @@
     <Compile Include="Commands\JoinConversationCommand.cs" />
     <Compile Include="Commands\SendMessageCommand.cs" />
     <Compile Include="IMssgsCommand.cs" />
+    <Compile Include="InternalMessage.cs" />
     <Compile Include="MssgsConversation.cs" />
     <Compile Include="MssgsMessage.cs" />
     <Compile Include="MssgsResponse.cs" />
     <Compile Include="MssgsApiException.cs" />
     <Compile Include="MssgsClient.cs" />
+    <Compile Include="MssgsUser.cs" />
     <Compile Include="PacketBuilder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RawMssgsResponse.cs" />
+    <Compile Include="Responses\ConversationAction.cs" />
     <Compile Include="Responses\ConversationInfo.cs" />
     <Compile Include="Responses\CredentialsVerification.cs" />
     <Compile Include="Responses\MessagesList.cs" />

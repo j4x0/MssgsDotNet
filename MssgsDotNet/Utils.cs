@@ -29,11 +29,5 @@ namespace MssgsDotNet
                 return false;
             }
         }
-
-        public static TValue GetOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key)
-        {
-            if (!dict.ContainsKey(key)) return default(TValue);
-            else return dict[key];
-        }
     }
 }

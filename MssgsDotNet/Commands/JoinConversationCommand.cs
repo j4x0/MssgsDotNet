@@ -24,24 +24,21 @@ namespace MssgsDotNet.Commands
 
         public UsernameInfo CreateResponse(RawMssgsResponse rawResponse)
         {
-            rawResponse.Data.AssureHas("valid");
-            var valid = Convert.ToBoolean(rawResponse.Data["valid"]);
+            var valid = Convert.ToBoolean(rawResponse["valid"]);
             if (valid)
             {
-                rawResponse.Data.AssureHas("username");
                 return new UsernameInfo(
-                    rawResponse.Data["username"],
+                    rawResponse["username"],
                     true,
                     false
                     );
             }
             else
             {
-                rawResponse.Data.AssureHas("used");
                 return new UsernameInfo(
                     String.Empty,
                     false,
-                    Convert.ToBoolean(rawResponse.Data["used"])
+                    Convert.ToBoolean(rawResponse["used"])
                     );
             }
         }

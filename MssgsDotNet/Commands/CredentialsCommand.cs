@@ -22,8 +22,7 @@ namespace MssgsDotNet.Commands
 
         public CredentialsVerification CreateResponse(RawMssgsResponse rawResponse)
         {
-            rawResponse.Data.AssureHas("valid");
-            return new CredentialsVerification(Convert.ToBoolean(rawResponse.Data["valid"]));
+            return new CredentialsVerification(Convert.ToBoolean(rawResponse["valid"]));
         }
     }
 }
