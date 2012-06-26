@@ -60,7 +60,6 @@ namespace MssgsDotNet
                     return;
                 }
             }
-            throw new Exception("User with name \"" + username + "\" doesn't exist in the conversation");
         }
 
         public bool HasUser(string username)

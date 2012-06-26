@@ -10,7 +10,7 @@ using LinqToTwitter;
 namespace MssgsDotNetTest
 {
     public class Program
-    {   
+    {
         public static AppCredentials creds = new AppCredentials(String.Empty, String.Empty);
         public static List<string> trusted = new List<string>();
         public static Dictionary<string, string> reactions = new Dictionary<string, string>();
@@ -110,14 +110,13 @@ namespace MssgsDotNetTest
             string conversationId = Console.ReadLine();
             if (conversationId == "debug channel")
                 conversationId = "e7f994d5e668b7a9ad7eca7c218c3880";
-
             var conversation = new MssgsConversation(conversationId);
             Console.WriteLine("Setting up TwitterContext...");
             var ctx = new TwitterContext();
             bool processing = false;
             int max = 20;
             Program.lastTime = GetUnixTime();
-
+            
             client.InternalMessageReceived += (InternalMessage msg) =>
                 {
                     Console.WriteLine();
@@ -308,10 +307,35 @@ namespace MssgsDotNetTest
                         }
                     }
                 };
+
+            client.AuthUser(name, "http://chinesepaladin.org/images/anigifs/wind1.gif");
+            while (!client.IsUserAuthenticated)
+            {
+                if (show < 100000000)
+                    show++;
+                else
+                {
+                    show = 0;
+                    string text = "Authing user";
+                    for (int i = 0; i < dots; i++)
+                    {
+                        text += ".";
+                    }
+                    Console.WriteLine(text);
+                    if (dots > 4) dots = 0;
+                    dots++;
+                }
+            }
             Console.WriteLine("Trying to join conversation: " + conversationId);
+            client.ConversationJoinFailed += (e) =>
+                {
+                    Console.WriteLine(e.Message);
+                };
+            Console.WriteLine("If the chat needs a password please provide it, else hit enter");
+            var pw = Console.ReadLine();
             try
             {
-                client.Join(conversation, name);
+                client.Join(conversationId, pw);
             }
             catch (Exception e)
             {
@@ -357,7 +381,7 @@ namespace MssgsDotNetTest
                     string ch = GetCommandArgs("/join", text);
                     if (ch == "old")
                         ch = conversationId;
-                    client.Join(ch);
+                    client.Join(ch, "BQAJvj5a4qMSSVj6");
                 }
                 else if (text.StartsWith("/trusted "))
                 {

@@ -20,6 +20,8 @@ namespace MssgsDotNet
 
         public static bool ToBoolean(this string str)
         {
+            if (str.IsFrikkinEmpty())
+                return false;
             try
             {
                 return Convert.ToBoolean(str.Replace("0", "false").Replace("1", "true").Replace("null", "false"));

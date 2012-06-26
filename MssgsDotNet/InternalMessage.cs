@@ -62,8 +62,11 @@ namespace MssgsDotNet
                     return new InternalMessage(InternalMessageType.Options, msgData);
                 case "op":
                     return new InternalMessage(InternalMessageType.Op, msgData);
+                case "globalop":
+                    return new InternalMessage(InternalMessageType.GlobalOp, msgData);
                 case "me":
                     return new InternalMessage(InternalMessageType.Me, msgData);
+                    
                 default:
                     break;
             }
@@ -85,6 +88,7 @@ namespace MssgsDotNet
             Message,
             Options,
             Op,
+            GlobalOp,
             Me
         }
     }

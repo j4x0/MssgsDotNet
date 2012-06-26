@@ -16,6 +16,7 @@ namespace MssgsDotNet
         public string Message { get; set; }
         public string ConversationId { get; private set; }
         public bool New { get; private set; }
+        public string ImageUrl { get; private set; }
 
         public MssgsMessage(
             string message, 
@@ -24,7 +25,9 @@ namespace MssgsDotNet
             string username, 
             bool op, 
             bool isInternal, 
-            bool newMessage)
+            bool newMessage,
+            string imageUrl
+            )
         {
             this.Message = message;
             this.ConversationId = conversationId;
@@ -33,6 +36,7 @@ namespace MssgsDotNet
             this.Op = op;
             this.Internal = isInternal;
             this.New = newMessage;
+            this.ImageUrl = imageUrl;
         }
 
         public MssgsMessage(string message, string conversationId)
@@ -52,7 +56,8 @@ namespace MssgsDotNet
                 data["username"],
                 data["op"].ToBoolean(),
                 isInternal,
-                newMessage
+                newMessage,
+                data["image"]
                 );
             if(isInternal)
                 message.InternalMessage = InternalMessage.Parse(msg);

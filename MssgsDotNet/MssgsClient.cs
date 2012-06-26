@@ -17,7 +17,8 @@ namespace MssgsDotNet
     public class MssgsClient : IDisposable
     {
         public static readonly string MSSGS_API_URI = "api.mss.gs";
-        public static readonly int MSSGS_API_PORT = 8101;
+        public static readonly int MSSGS_API_PORT_SSL = 8101;
+        public static readonly int MSSG_API_PORT = 8102;
 
         public AppCredentials AppCreds { get; private set; }
         public bool IsAuthenticated { get; private set; }
@@ -39,10 +40,25 @@ namespace MssgsDotNet
                 this.name = value;
             }
         }
+
         public MssgsUser User { get; private set; }
 
         public int Port { get; private set; }
         public string Host { get; private set; }
+        public bool UseSSL
+        {
+            get
+            {
+                return this.Port == MSSGS_API_PORT_SSL;
+            }
+            set
+            {
+                if (value)
+                    this.Port = MSSGS_API_PORT_SSL;
+                else
+                    this.Port = MSSG_API_PORT;
+            }
+        }
 
         private Queue<string> OutgoingData;
         private PacketBuilder currentPacket;
@@ -56,18 +72,22 @@ namespace MssgsDotNet
         public event Handler Connected;
         public event Handler<WelcomeMessage> Welcomed;
         public event Handler<MssgsConversation> ConversationJoined;
+        public event Handler<JoinConversationException> ConversationJoinFailed;
         public event Handler<MssgsMessage> MessageReceived;
         public event Handler<InternalMessage> InternalMessageReceived;
         public event Handler<MssgsConversation> ConversationLeft;
+        public event Handler<Exception> ExceptionThrown;
+        public event Handler<UsernameInfo> UserAuthed;
 
         public MssgsConversation Conversation { get; private set; }
         public bool InConversation { get; private set; }
         public bool IsConnected { get; private set; }
         public bool IsWelcomed { get; private set; }
+        public bool IsUserAuthenticated { get; private set; }
 
         private bool handling;
 
-        public MssgsClient(string mssgsApiHost, int mssgsApiPort, string name)
+        public MssgsClient(string mssgsApiHost, int mssgsApiPort, string name, string password)
         {
             this.IsAuthenticated = false;
             this.IsConnected = false;
@@ -92,7 +112,9 @@ namespace MssgsDotNet
                 {
                     List<object> messagesraw = (List<object>)SimpleJson.SimpleJson.DeserializeObject(rawResponse["0"]);
                     var messages = new List<MssgsMessage>();
-
+                    this.InConversation = true;
+                    if (this.ConversationJoined != null)
+                        this.ConversationJoined(this.Conversation);
                     foreach (object message in messagesraw)
                     {
                         var rawMessage = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(message.ToString());
@@ -135,7 +157,9 @@ namespace MssgsDotNet
             this.RegisterResponseFactory<MssgsUser>("settings", (RawMssgsResponse rawResponse) =>
                 new MssgsUser(rawResponse["username"], rawResponse["op"].ToBoolean())
             );
-
+            this.RegisterResponseFactory<JoinConversationException>("failed to join conversation", (RawMssgsResponse rawResponse) =>
+                new JoinConversationException(rawResponse["message"], Convert.ToInt32(rawResponse["error"]))
+            );
 
             this.RegisterHandler<WelcomeMessage>("welcome", (WelcomeMessage msg) =>
                 {
@@ -205,13 +229,20 @@ namespace MssgsDotNet
                 }
             );
             this.RegisterHandler<MssgsUser>("settings", (p) => this.User = p );
+            this.RegisterHandler<JoinConversationException>("failed to join conversation", (e) =>
+                {
+                    this.Conversation = null;
+                    if (this.ConversationJoinFailed != null)
+                        this.ConversationJoinFailed(e);
+                }
+            );
         }
 
        
 
-        public MssgsClient() : this(MssgsClient.MSSGS_API_URI, MssgsClient.MSSGS_API_PORT, String.Empty) { }
-        public MssgsClient(string name) : this(MssgsClient.MSSGS_API_URI, MssgsClient.MSSGS_API_PORT, name) { }
-
+        public MssgsClient() : this(String.Empty, String.Empty) { }
+        public MssgsClient(string name) : this(name, String.Empty) { }
+        public MssgsClient(string name, string password) : this(MssgsClient.MSSGS_API_URI, MssgsClient.MSSGS_API_PORT_SSL, name, password) { }
 
         public void Open()
         {
@@ -225,8 +256,9 @@ namespace MssgsDotNet
                         this.IsConnected = true;
                         if (this.Connected != null)
                             this.Connected();
-                        using (NetworkStream stream = client.GetStream())
+                        using (var stream = new System.Net.Security.SslStream(client.GetStream()))
                         {
+                            stream.AuthenticateAsClient(this.Host);
                             using (StreamWriter writer = new StreamWriter(stream))
                             {
 
@@ -281,7 +313,8 @@ namespace MssgsDotNet
                 if (!ver.Valid)
                 {
                     this.IsAuthenticated = false;
-                    throw new MssgsApiException("Credentials invalid");
+                    if (this.ExceptionThrown != null)
+                        this.ExceptionThrown(new MssgsApiException("Credentials invalid"));
                 }
                 else
                 {
@@ -422,16 +455,20 @@ namespace MssgsDotNet
                   
                     if (!this.handling)
                     {
+                        Tuple<string, IResponseCallback> h = null;
                         foreach (var handler in this.handlers)
                         {
                             if (handler.Item1 == method)
-                                this.handlers.Remove(handler);
+                                h = handler;
                         }
+                        if (h != null)
+                            this.handlers.Remove(h);
                         return;
                     }
                 }
             }
-            );  
+            );
+            del.Start();
         }
 
         public void Close()
@@ -453,32 +490,44 @@ namespace MssgsDotNet
             GC.SuppressFinalize(this);
         }
 
-        public void Join(string conversationId)
+        public void AuthUser(string username,string avatarUrl)
         {
-            if (this.InConversation)
-                throw new Exception("Already in conversation!");
-            this.ExecuteCommand(new JoinConversationCommand(conversationId, this.Name), 
+            this.Name = username;
+            this.ExecuteCommand(new AuthUserCommand(username, avatarUrl),
                 (UsernameInfo info) =>
-                    {
-                        if (info.Used)
-                            throw new MssgsApiException("This username is already being used!");
-                        if (!info.Valid)
-                            throw new MssgsApiException("This username isn't valid!");
-                        this.Name = info.Username;
-                        this.InConversation = true;
-                        this.Conversation = new MssgsConversation(conversationId);
-                        if (this.ConversationJoined != null)
-                            this.ConversationJoined(this.Conversation);
-                    }
+                {
+                    if (info.Used)
+                        if (this.ExceptionThrown != null)
+                        {
+                            this.ExceptionThrown(new MssgsApiException("This username is already being used!"));
+                            return;
+                        }
+                    if (!info.Valid)
+                        if (this.ExceptionThrown != null)
+                        {
+                            this.ExceptionThrown(new MssgsApiException("This username isn't valid!"));
+                            return;
+                        }
+                    this.Name = info.Username;
+                    this.IsUserAuthenticated = true;
+                    if (this.UserAuthed != null)
+                        this.UserAuthed(info);
+                }
             );
         }
 
-        public void Join(string conversationId, string name)
+        public void Join(string conversationId, string conversationPassword)
         {
-            this.Name = name;
-            this.Join(conversationId);
+            if (this.InConversation)
+                throw new Exception("Already in conversation!");
+            this.ExecuteCommand(new JoinConversationCommand(conversationId, conversationPassword));
+            this.Conversation = new MssgsConversation(conversationId);
         }
 
+        public void Join(string conversationId)
+        {
+            this.Join(conversationId, String.Empty);
+        }
 
         public void Send(MssgsMessage message)
         {

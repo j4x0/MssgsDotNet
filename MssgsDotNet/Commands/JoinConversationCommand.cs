@@ -6,41 +6,18 @@ using MssgsDotNet.Responses;
 
 namespace MssgsDotNet.Commands
 {
-    public class JoinConversationCommand : IMssgsCommand<UsernameInfo>
+    public class JoinConversationCommand : IMssgsCommand
     {
         public string Method { get; set; }
 
         public Dictionary<string, string> Data { get; set; }
 
-        public JoinConversationCommand(string conversationId, string username)
+        public JoinConversationCommand(string conversationId, string password)
         {
-            this.Method = "auth";
+            this.Method = "join conversation";
             this.Data = new Dictionary<string, string>();
-            if (username.IsFrikkinEmpty())
-                throw new Exception("Username can't be empty!");
-            this.Data["username"] = username;
-            this.Data["conversationId"] = conversationId;
-        }
-
-        public UsernameInfo CreateResponse(RawMssgsResponse rawResponse)
-        {
-            var valid = Convert.ToBoolean(rawResponse["valid"]);
-            if (valid)
-            {
-                return new UsernameInfo(
-                    rawResponse["username"],
-                    true,
-                    false
-                    );
-            }
-            else
-            {
-                return new UsernameInfo(
-                    String.Empty,
-                    false,
-                    Convert.ToBoolean(rawResponse["used"])
-                    );
-            }
+            this.Data["id"] = conversationId;
+            this.Data["robot password"] = password;
         }
     }
 }

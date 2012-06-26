@@ -41,6 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppCredentials.cs" />
+    <Compile Include="Commands\AuthUserCommand.cs" />
     <Compile Include="Commands\ConversationInfoCommand.cs" />
     <Compile Include="Commands\CredentialsCommand.cs" />
     <Compile Include="Commands\JoinConversationCommand.cs" />
@@ -59,6 +60,7 @@
     <Compile Include="Responses\ConversationAction.cs" />
     <Compile Include="Responses\ConversationInfo.cs" />
     <Compile Include="Responses\CredentialsVerification.cs" />
+    <Compile Include="Responses\JoinConversationException.cs" />
     <Compile Include="Responses\MessagesList.cs" />
     <Compile Include="Responses\UsernameInfo.cs" />
     <Compile Include="Responses\WelcomeMessage.cs" />
