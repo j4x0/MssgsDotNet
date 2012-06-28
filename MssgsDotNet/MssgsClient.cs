@@ -18,7 +18,7 @@ namespace MssgsDotNet
     {
         public static readonly string MSSGS_API_URI = "api.mss.gs";
         public static readonly int MSSGS_API_PORT_SSL = 8101;
-        public static readonly int MSSG_API_PORT = 8102;
+        public static readonly int MSSGS_API_PORT = 8102;
 
         public AppCredentials AppCreds { get; private set; }
         public bool IsAuthenticated { get; private set; }
@@ -45,7 +45,7 @@ namespace MssgsDotNet
 
         public int Port { get; private set; }
         public string Host { get; private set; }
-        public bool UseSSL
+        public bool UseSsl
         {
             get
             {
@@ -56,7 +56,7 @@ namespace MssgsDotNet
                 if (value)
                     this.Port = MSSGS_API_PORT_SSL;
                 else
-                    this.Port = MSSG_API_PORT;
+                    this.Port = MSSGS_API_PORT;
             }
         }
 
@@ -68,26 +68,34 @@ namespace MssgsDotNet
 
         public delegate void Handler();
         public delegate void Handler<T>(T obj);
+        public delegate void Handler<T, V>(T obj1, V obj2);
         public event Handler Authenticated;
         public event Handler Connected;
         public event Handler<WelcomeMessage> Welcomed;
-        public event Handler<MssgsConversation> ConversationJoined;
-        public event Handler<JoinConversationException> ConversationJoinFailed;
-        public event Handler<MssgsMessage> MessageReceived;
-        public event Handler<InternalMessage> InternalMessageReceived;
+        public event Handler<MssgsConversation, ConversationInfo> ConversationJoined;
+        public event Handler<MssgsConversation, JoinConversationException> ConversationJoinFailed;
+        public event Handler<MssgsConversation, MssgsMessage> MessageReceived;
+        public event Handler<MssgsConversation, InternalMessage> InternalMessageReceived;
         public event Handler<MssgsConversation> ConversationLeft;
         public event Handler<Exception> ExceptionThrown;
         public event Handler<UsernameInfo> UserAuthed;
 
-        public MssgsConversation Conversation { get; private set; }
-        public bool InConversation { get; private set; }
+        private Dictionary<string, MssgsConversation> conversations;
+        public bool InConversation
+        {
+            get
+            {
+                return this.conversations.Count > 0;
+            }
+        }
         public bool IsConnected { get; private set; }
         public bool IsWelcomed { get; private set; }
         public bool IsUserAuthenticated { get; private set; }
 
         private bool handling;
 
-        public MssgsClient(string mssgsApiHost, int mssgsApiPort, string name, string password)
+
+        public MssgsClient(string mssgsApiHost, int mssgsApiPort, string name)
         {
             this.IsAuthenticated = false;
             this.IsConnected = false;
@@ -95,6 +103,7 @@ namespace MssgsDotNet
             this.handling = false;
             this.factoryMethods = new Dictionary<string, Func<RawMssgsResponse, MssgsResponse>>();
             this.handlers = new List<Tuple<string, IResponseCallback>>();
+            this.conversations = new Dictionary<string, MssgsConversation>();
             this.Name = name;
             this.OutgoingData = new Queue<string>();
             this.Host = mssgsApiHost;
@@ -108,13 +117,10 @@ namespace MssgsDotNet
                     return new WelcomeMessage(response.Data["credentials"], response.Data["webAPI"], response.Data["socketAPI"]);
                 }
             );
-            this.RegisterResponseFactory<MessagesList>("messages", (RawMssgsResponse rawResponse) =>
+            this.RegisterResponseFactory<MessageList>("messages", (RawMssgsResponse rawResponse) =>
                 {
                     List<object> messagesraw = (List<object>)SimpleJson.SimpleJson.DeserializeObject(rawResponse["0"]);
-                    var messages = new List<MssgsMessage>();
-                    this.InConversation = true;
-                    if (this.ConversationJoined != null)
-                        this.ConversationJoined(this.Conversation);
+                    var messages = new List<MssgsMessage>(); 
                     foreach (object message in messagesraw)
                     {
                         var rawMessage = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(message.ToString());
@@ -124,7 +130,31 @@ namespace MssgsDotNet
                             );
                         messages.Add(msg);
                     }
-                    return new MessagesList(messages);
+                    return new MessageList(messages);
+                }
+            );
+          this.RegisterResponseFactory<ResponseTuple<ConversationInfo, UserList>>("conversation", (RawMssgsResponse rawResponse) =>
+                {
+                    List<object> users = (List<object>)SimpleJson.SimpleJson.DeserializeObject(rawResponse["usernames"]);
+                    List<object> ops = (List<object>)SimpleJson.SimpleJson.DeserializeObject(rawResponse["op"]);
+                    List<object> globalops = (List<object>)SimpleJson.SimpleJson.DeserializeObject(rawResponse["globalop"]);
+                    var userList = new List<MssgsUser>();
+                    foreach (object user in users)
+                        userList.Add(new MssgsUser((string)user));
+                    foreach (object op in ops)
+                        userList.Add(new MssgsUser((string)op, true, false));
+                    foreach (object globalop in globalops)
+                        userList.Add(new MssgsUser((string)globalop, false, true));
+                    return new ResponseTuple<ConversationInfo,UserList>(
+                        new ConversationInfo
+                        {
+                            ConversationId = rawResponse["conversation"],
+                            Channel = rawResponse["channel"].ToBoolean(),
+                            RobotPassword = rawResponse["robotpassword"].ToBoolean(),
+                            ReadOnly = rawResponse["readonly"].ToBoolean()
+                        },
+                        new UserList(userList)
+                        );
                 }
             );
             this.RegisterResponseFactory<MssgsMessage>("message", (RawMssgsResponse rawResponse) =>
@@ -155,72 +185,88 @@ namespace MssgsDotNet
                 new ConversationAction(ConversationAction.ActionType.UserUnopped, rawResponse.Data)
             );
             this.RegisterResponseFactory<MssgsUser>("settings", (RawMssgsResponse rawResponse) =>
-                new MssgsUser(rawResponse["username"], rawResponse["op"].ToBoolean())
+                new MssgsUser(rawResponse["username"], rawResponse["op"].ToBoolean(), rawResponse["globalop"].ToBoolean())
             );
             this.RegisterResponseFactory<JoinConversationException>("failed to join conversation", (RawMssgsResponse rawResponse) =>
                 new JoinConversationException(rawResponse["message"], Convert.ToInt32(rawResponse["error"]))
             );
 
-            this.RegisterHandler<WelcomeMessage>("welcome", (WelcomeMessage msg) =>
+            this.RegisterHandler<WelcomeMessage>("welcome", (cid, msg) =>
                 {
                     this.IsWelcomed = true;
                     if (this.Welcomed != null)
                         this.Welcomed(msg);
                 }
             );
-            this.RegisterHandler<MessagesList>("messages", (MessagesList list) =>
+            this.RegisterHandler<ResponseTuple<ConversationInfo, UserList>>("conversation", (cid, tuple) =>
                 {
+                    var conv = this[cid];
+                    foreach (var user in tuple.Item2.Users)
+                        conv.AddUser(user);
+                    if (this.ConversationJoined != null)
+                        this.ConversationJoined(conv, tuple.Item1);
+                }
+            );
+            this.RegisterHandler<MessageList>("messages", (cid, list) =>
+                {
+                    var conv = this[list.Messages.First().ConversationId];
                     if (this.MessageReceived != null)
                     {
                         foreach (var message in list.Messages)
                         {
                             if (this.InConversation)
-                                this.Conversation.AddMessage(message);
-                            this.MessageReceived(message);
+                                conv.AddMessage(message);
+                            this.MessageReceived(conv, message);
                         }
                     }
                 }
             );
-            this.RegisterHandler<MssgsMessage>("message", (MssgsMessage msg) =>
+            this.RegisterHandler<MssgsMessage>("message", (string cid, MssgsMessage msg) =>
                 {
+                    var conv = this[cid];
                     if (this.InConversation)
-                        this.Conversation.AddMessage(msg);
+                        conv.AddMessage(msg);
                     if (this.MessageReceived != null)
-                        this.MessageReceived(msg);
+                        this.MessageReceived(conv, msg);
                     if (msg.Internal && msg.InternalMessage != null && this.InternalMessageReceived != null)
-                        this.InternalMessageReceived(msg.InternalMessage);
+                        this.InternalMessageReceived(conv, msg.InternalMessage);
                 }
             );
-            this.RegisterHandler<ConversationAction>((ConversationAction action) =>
+            this.RegisterHandler<ConversationAction>((cid, action) =>
                 {
                     switch (action.Type)
                     {
                         case ConversationAction.ActionType.UserJoined:
-                            this.Conversation.AddUser(new MssgsUser(action.Data["username"], action.Data["op"].ToBoolean()));
+                            this[cid].AddUser(
+                                new MssgsUser(
+                                    action.Data["username"], 
+                                    action.Data["op"].ToBoolean(), 
+                                    action.Data["globalop"].ToBoolean()
+                                    )
+                                    );
                             break;
                         case ConversationAction.ActionType.UserLeft:
-                            this.Conversation.RemoveUser(action.Data["username"]);
+                            this[cid].RemoveUser(action.Data["username"]);
                             break;
                         case ConversationAction.ActionType.UserChangedName:
-                            this.Conversation.RenameUser(action.Data["oldUsername"], action.Data["username"]);
+                            this[cid].RenameUser(action.Data["oldUsername"], action.Data["username"]);
                             break;
                         case ConversationAction.ActionType.ConversationSecured:
-                            this.Conversation.Password = action.Data["password"];
-                            this.Conversation.Secured = true;
+                            this[cid].Password = action.Data["password"];
+                            this[cid].Secured = true;
                             break;
                         case ConversationAction.ActionType.ConversationUnsecured:
-                            this.Conversation.Secured = false;
+                            this[cid].Secured = false;
                             break;
                         case ConversationAction.ActionType.UserOpped:
-                            this.Conversation[action.Data["username"]].Op = true;
+                            this[cid][action.Data["username"]].Op = true;
                             break;
                         case ConversationAction.ActionType.UserUnopped:
-                            this.Conversation[action.Data["username"]].Op = false;
+                            this[cid][action.Data["username"]].Op = false;
                             break;
                         case ConversationAction.ActionType.Removed:
-                            this.InConversation = false;
                             if (this.ConversationLeft != null)
-                                this.ConversationLeft(this.Conversation);
+                                this.ConversationLeft(this[cid]);
                             this.Close();
                             break;
                         default:
@@ -228,21 +274,21 @@ namespace MssgsDotNet
                     }
                 }
             );
-            this.RegisterHandler<MssgsUser>("settings", (p) => this.User = p );
-            this.RegisterHandler<JoinConversationException>("failed to join conversation", (e) =>
+            this.RegisterHandler<MssgsUser>("settings", (cid, p) => this.User = p );
+            this.RegisterHandler<JoinConversationException>("failed to join conversation", (cid, e) =>
                 {
-                    this.Conversation = null;
+                    var conv = this[cid];
+                    this.conversations.Remove(cid);
                     if (this.ConversationJoinFailed != null)
-                        this.ConversationJoinFailed(e);
+                        this.ConversationJoinFailed(conv, e);
                 }
             );
         }
 
        
 
-        public MssgsClient() : this(String.Empty, String.Empty) { }
-        public MssgsClient(string name) : this(name, String.Empty) { }
-        public MssgsClient(string name, string password) : this(MssgsClient.MSSGS_API_URI, MssgsClient.MSSGS_API_PORT_SSL, name, password) { }
+        public MssgsClient() : this(String.Empty) { }
+        public MssgsClient(string name) : this(MssgsClient.MSSGS_API_URI, MssgsClient.MSSGS_API_PORT_SSL, name) { }
 
         public void Open()
         {
@@ -256,49 +302,55 @@ namespace MssgsDotNet
                         this.IsConnected = true;
                         if (this.Connected != null)
                             this.Connected();
-                        using (var stream = new System.Net.Security.SslStream(client.GetStream()))
+                        Stream stream; 
+                        if (this.UseSsl)
                         {
-                            stream.AuthenticateAsClient(this.Host);
-                            using (StreamWriter writer = new StreamWriter(stream))
-                            {
-
-                                Thread readThread = new Thread(() =>
+                            var s = new System.Net.Security.SslStream(client.GetStream());
+                            s.AuthenticateAsClient(this.Host);
+                            stream = s;
+                        }
+                        else
+                        {
+                            stream = client.GetStream();
+                        }
+                        using (StreamWriter writer = new StreamWriter(stream))
+                        {
+                            Thread readThread = new Thread(() =>
+                                {
+                                    while (!this.stop && client.Connected)
                                     {
-                                        while (!this.stop && client.Connected)
+                                        byte[] buffer = new byte[1024];
+                                        stream.Read(buffer, 0, buffer.Length);
+                                        string incoming = Encoding.UTF8.GetString(buffer);
+                                        if (incoming.StartsWith("{") && this.currentPacket == null)
+                                            this.currentPacket = new PacketBuilder();
+                                        if (this.currentPacket != null)
                                         {
-                                            byte[] buffer = new byte[1024];
-                                            stream.Read(buffer, 0, buffer.Length);
-                                            string incoming = Encoding.UTF8.GetString(buffer);
-                                            if (incoming.StartsWith("{") && this.currentPacket == null)
-                                                this.currentPacket = new PacketBuilder();
-                                            if (this.currentPacket != null)
-                                            {
-                                                this.currentPacket.Append(incoming);
-                                                //Console.WriteLine(">>" + incoming);
-                                            }
-                                            if (this.currentPacket != null && this.currentPacket.Built())
-                                            {
-                                                this.HandlePacket(this.currentPacket);
-                                                this.currentPacket = null;
-                                            }
+                                            this.currentPacket.Append(incoming);
+                                            //Console.WriteLine(">>" + incoming);
+                                        }
+                                        if (this.currentPacket != null && this.currentPacket.Built())
+                                        {
+                                            this.HandlePacket(this.currentPacket);
+                                            this.currentPacket = null;
                                         }
                                     }
-                                    );
-                                readThread.Start();
-                                while (!this.stop && client.Connected)
-                                {
-                                    if (this.OutgoingData.Count > 0)
-                                    {
-                                        var str = this.OutgoingData.Dequeue();
-                                        var data = str + "\r\n\r\n";
-                                        //Console.WriteLine("<< " + str);
-                                        writer.Write(data);
-                                        writer.Flush();
-                                    }
                                 }
-                                readThread.Abort();
+                                );
+                            readThread.Start();
+                            while (!this.stop && client.Connected)
+                            {
+                                if (this.OutgoingData.Count > 0)
+                                {
+                                    var str = this.OutgoingData.Dequeue();
+                                    var data = str + "\r\n\r\n";
+                                    //Console.WriteLine("<< " + str);
+                                    writer.Write(data);
+                                    writer.Flush();
+                                }
                             }
-                        } 
+                            readThread.Abort();
+                        }
                     }
                 }
              );
@@ -308,7 +360,7 @@ namespace MssgsDotNet
         public void Authenticate(AppCredentials appCreds)
         {
             if (this.IsAuthenticated) return;
-            this.ExecuteCommand(new CredentialsCommand(appCreds), (CredentialsVerification ver) =>
+            this.ExecuteCommand(new CredentialsCommand(appCreds), (string cid, CredentialsVerification ver) =>
             {
                 if (!ver.Valid)
                 {
@@ -352,7 +404,7 @@ namespace MssgsDotNet
                 );
         }
 
-        public void ExecuteCommand<T>(IMssgsCommand<T> command, Handler<T> callback) where T : MssgsResponse
+        public void ExecuteCommand<T>(IMssgsCommand<T> command, Action<string, T> callback) where T : MssgsResponse
         {
             if (!this.IsConnected)
                 throw new Exception("Please connect first before you execute commands!");
@@ -366,10 +418,10 @@ namespace MssgsDotNet
             jsonObject["end"] = true;
             string json = SimpleJson.SimpleJson.SerializeObject(jsonObject);
             this.OutgoingData.Enqueue(json);
-            this.RegisterHandler<T>(command.Method, (T resp) =>
+            this.RegisterHandler<T>(command.Method, (string cid, T resp) =>
                 {
                     this.UnregisterHandler(command.Method);
-                    callback(resp);
+                    callback(cid, resp);
                 }
             );
         }
@@ -392,15 +444,23 @@ namespace MssgsDotNet
         {
             if (!this.factoryMethods.ContainsKey(rawResponse.Method))
                 return;
+            string cid = null;
+            if(rawResponse.Data.ContainsKey("conversationId"))
+                cid = rawResponse["conversationId"];
+            else if (rawResponse.Data.ContainsKey("id"))
+                cid = rawResponse["id"];
+            else if (rawResponse.Data.ContainsKey("conversation"))
+                cid = rawResponse["conversation"];
             var response = this.factoryMethods[rawResponse.Method].Invoke(rawResponse);
             if (response == null) return;
             response.Method = rawResponse.Method;
             this.handling = true;
             foreach (var handler in this.handlers)
             {
+                if (handler == null) continue;
                 if ((handler.Item1 == null || handler.Item1 == response.Method) && object.Equals(handler.Item2.Type, response.GetType()))
                 {
-                    handler.Item2.Execute(response);
+                    handler.Item2.Execute(cid, response);
                 }
             }
             this.handling = false;
@@ -420,7 +480,7 @@ namespace MssgsDotNet
                 this.factoryMethods.Remove(methodName);
         }
 
-        public void RegisterHandler<T>(string method, Action<T> callback) where T : MssgsResponse
+        public void RegisterHandler<T>(string method, Action<string, T> callback) where T : MssgsResponse
         {
             Task add = new Task(() =>
             {
@@ -439,7 +499,7 @@ namespace MssgsDotNet
             add.Start();
         }
 
-        public void RegisterHandler<T>(Action<T> callback) where T : MssgsResponse
+        public void RegisterHandler<T>(Action<string, T> callback) where T : MssgsResponse
         {
             this.RegisterHandler<T>(null, callback);
         }
@@ -471,30 +531,12 @@ namespace MssgsDotNet
             del.Start();
         }
 
-        public void Close()
-        {
-            this.stop = true;
-            this.IsConnected = false;
-            this.IsAuthenticated = false;
-            this.IsWelcomed = false;
-            try
-            {
-                this.clientThread.Abort();
-            }
-            catch { }
-        }
-
-        public void Dispose()
-        {
-            this.Close();
-            GC.SuppressFinalize(this);
-        }
-
+        
         public void AuthUser(string username,string avatarUrl)
         {
             this.Name = username;
             this.ExecuteCommand(new AuthUserCommand(username, avatarUrl),
-                (UsernameInfo info) =>
+                (string cid, UsernameInfo info) =>
                 {
                     if (info.Used)
                         if (this.ExceptionThrown != null)
@@ -521,7 +563,7 @@ namespace MssgsDotNet
             if (this.InConversation)
                 throw new Exception("Already in conversation!");
             this.ExecuteCommand(new JoinConversationCommand(conversationId, conversationPassword));
-            this.Conversation = new MssgsConversation(conversationId);
+            this.conversations.Add(conversationId, new MssgsConversation(conversationId));
         }
 
         public void Join(string conversationId)
@@ -534,28 +576,61 @@ namespace MssgsDotNet
             this.ExecuteCommand(new SendMessageCommand(message));
         }
 
-        public void Send(string message)
+        public void Send(string message, string conversationId)
         {
             if (!this.InConversation)
                 throw new Exception("You're not in a conversation!");
-            this.Send(new MssgsMessage(message, this.Conversation.Id));
+            this.Send(new MssgsMessage(message, conversationId));
         }
+
+        public MssgsConversation GetConversation(string id)
+        {
+            return this.conversations[id];
+        }
+
+        public MssgsConversation this[string id]
+        {
+            get
+            {
+                return this.GetConversation(id);
+            }
+        }
+
+        public void Close()
+        {
+            this.stop = true;
+            this.IsConnected = false;
+            this.IsAuthenticated = false;
+            this.IsWelcomed = false;
+            try
+            {
+                this.clientThread.Abort();
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            this.Close();
+            GC.SuppressFinalize(this);
+        }
+
     }
 
     class ResponseCallback<T> : IResponseCallback where T : MssgsResponse
     {
         public Type Type { get; set; }
-        private Action<T> func;
+        private Action<string, T> func;
 
-        public ResponseCallback(Action<T> func)
+        public ResponseCallback(Action<string, T> func)
         {
             this.Type = typeof(T);
             this.func = func;
         }
 
-        public void Execute(MssgsResponse obj)
+        public void Execute(string arg1, MssgsResponse arg2)
         {
-            this.func.Invoke((T)obj);
+            this.func.Invoke(arg1, (T)arg2);
         }
     }
 
@@ -563,6 +638,6 @@ namespace MssgsDotNet
     {
         Type Type { get;  set; }
 
-        void Execute(MssgsResponse obj);
+        void Execute(string arg1, MssgsResponse arg2);
     }
 }

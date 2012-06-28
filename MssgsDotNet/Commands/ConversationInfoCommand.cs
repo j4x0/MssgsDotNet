@@ -16,16 +16,28 @@ namespace MssgsDotNet.Commands
         {
             this.Method = "conversation info";
             this.Data = new Dictionary<string, string>();
-            this.Data["id"] = conversationId;
+            this.Data["conversation"] = conversationId;
         }
 
         public ConversationInfo CreateResponse(RawMssgsResponse rawResponse)
         {
-            return new ConversationInfo(
-                Convert.ToBoolean(rawResponse["password"]),
-                Convert.ToBoolean(rawResponse["readonly"]),
-                Convert.ToBoolean(rawResponse["password"])
-            );
+            var exists = rawResponse["exists"].ToBoolean();
+            if (exists)
+                return new ConversationInfo
+                {
+                    ConversationId = rawResponse["conversation"],
+                    PasswordProtected = rawResponse["password"].ToBoolean(),
+                    ReadOnly = rawResponse["readonly"].ToBoolean(),
+                    Exists = exists,
+                    SocialAuth = rawResponse["socialauth"].ToBoolean(),
+                    RobotPassword = rawResponse["robotpassword"].ToBoolean()
+                };
+            else
+                return new ConversationInfo
+                {
+                    Exists = exists
+                };
+
         }
     }
 }

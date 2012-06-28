@@ -61,7 +61,9 @@
     <Compile Include="Responses\ConversationInfo.cs" />
     <Compile Include="Responses\CredentialsVerification.cs" />
     <Compile Include="Responses\JoinConversationException.cs" />
-    <Compile Include="Responses\MessagesList.cs" />
+    <Compile Include="Responses\MessageList.cs" />
+    <Compile Include="Responses\ResponseTuple.cs" />
+    <Compile Include="Responses\UserList.cs" />
     <Compile Include="Responses\UsernameInfo.cs" />
     <Compile Include="Responses\WelcomeMessage.cs" />
     <Compile Include="SimpleJson.cs" />

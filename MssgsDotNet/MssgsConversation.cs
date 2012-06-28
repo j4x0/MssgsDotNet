@@ -40,6 +40,11 @@ namespace MssgsDotNet
             this.users.Remove(user);
         }
 
+        public List<MssgsUser> GetUsers()
+        {
+            return this.users;
+        }
+
         public MssgsUser GetUser(string username)
         {
             foreach (var user in this.users)

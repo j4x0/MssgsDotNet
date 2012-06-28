@@ -16,7 +16,7 @@ namespace MssgsDotNet.Commands
         {
             this.Method = "join conversation";
             this.Data = new Dictionary<string, string>();
-            this.Data["id"] = conversationId;
+            this.Data["conversation"] = conversationId;
             this.Data["robot password"] = password;
         }
     }

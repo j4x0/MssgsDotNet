@@ -5,11 +5,11 @@ using System.Text;
 
 namespace MssgsDotNet.Responses
 {
-    public class MessagesList : MssgsResponse
+    public class MessageList : MssgsResponse
     {
-        public List<MssgsMessage> Messages;
+        public List<MssgsMessage> Messages { get; private set; }
 
-        public MessagesList(List<MssgsMessage> messages)
+        public MessageList(List<MssgsMessage> messages)
         {
             this.Messages = messages;
         }

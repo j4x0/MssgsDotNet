@@ -11,7 +11,7 @@ namespace MssgsDotNetTest
 {
     public class Program
     {
-        public static AppCredentials creds = new AppCredentials(String.Empty, String.Empty);
+        public static AppCredentials creds = new AppCredentials("f280048c06a76dd05ad2e41d94caedbb", "OJkIxPHgv4vI");
         public static List<string> trusted = new List<string>();
         public static Dictionary<string, string> reactions = new Dictionary<string, string>();
         public static string lastMessage = "";
@@ -30,8 +30,9 @@ namespace MssgsDotNetTest
         public static void Main(string[] args)
         {
             var client = new MssgsClient();
+            client.UseSsl = false;
             client.Open();
-
+            
             client.Welcomed += (WelcomeMessage welcome) =>
             {
                 try
@@ -103,13 +104,14 @@ namespace MssgsDotNetTest
                 }
             }
             Console.WriteLine("Authenticated!");
+            client.ExecuteCommand(new ConversationInfoCommand("bot"), (n, c) => Console.WriteLine(c.SocialAuth));
             Console.WriteLine("Please enter a name for the client...");
             string name = Console.ReadLine();
 
             Console.WriteLine("Ok, " + name + ". Please enter the id of the conversation you wish to join...");
             string conversationId = Console.ReadLine();
             if (conversationId == "debug channel")
-                conversationId = "e7f994d5e668b7a9ad7eca7c218c3880";
+                conversationId = "1c0813b67baa47c8979808ae178b6492";
             var conversation = new MssgsConversation(conversationId);
             Console.WriteLine("Setting up TwitterContext...");
             var ctx = new TwitterContext();
@@ -117,7 +119,7 @@ namespace MssgsDotNetTest
             int max = 20;
             Program.lastTime = GetUnixTime();
             
-            client.InternalMessageReceived += (InternalMessage msg) =>
+            client.InternalMessageReceived += (MssgsConversation conv, InternalMessage msg) =>
                 {
                     Console.WriteLine();
                     Console.WriteLine("Internal Message: " + msg.Type);
@@ -156,7 +158,7 @@ namespace MssgsDotNetTest
                                 tweets += "\n\n";
                             }
                                 );
-                            Send(client, tweets);
+                            Send(client, tweets, conversationId);
                         }
                         processing = false;
                     }
@@ -164,7 +166,7 @@ namespace MssgsDotNetTest
             }
            );
 
-            client.MessageReceived += (MssgsMessage msg) =>
+            client.MessageReceived += (MssgsConversation conv, MssgsMessage msg) =>
                 {
                     string data = msg.Op ? "[!" : "[";
                     data += msg.Username + "] " + msg.Message;
@@ -183,7 +185,7 @@ namespace MssgsDotNetTest
                             {
                                 if (processing)
                                 {
-                                    Send(client, "Please wait...");
+                                    Send(client, "Please wait...", conversationId);
                                     return;
                                 }
                                 processing = true;
@@ -191,11 +193,11 @@ namespace MssgsDotNetTest
                                 if (keyword.IsFrikkinEmpty())
                                 {
                                     if (warned.Contains("kw")) return;
-                                    Send(client, "Please provide a keyword!");
+                                    Send(client, "Please provide a keyword!", conversationId);
                                     warned.Add("kw");
                                     return;
                                 }
-                                Send(client, "Fetching tweets... Please wait..");
+                                Send(client, "Fetching tweets... Please wait..", conversationId);
                                 var srch = Program.FetchTweets(ctx, keyword);
                                 string tweets = "Fetched "+ srch.Results.Count + " tweets: \n";
                                 srch.Results.ForEach(tweet =>
@@ -206,18 +208,18 @@ namespace MssgsDotNetTest
                                         tweets += "\n\n";
                                     }
                                     );
-                                Send(client, tweets);
+                                Send(client, tweets, conversationId);
                                 processing = false;
                             }
                             else if (msg.Message.StartsWith("--trending"))
                             {
                                 if (processing)
                                 {
-                                    Send(client, "Please wait...");
+                                    Send(client, "Please wait...", conversationId);
                                     return;
                                 }
                                 processing = true;
-                                Send(client, "Fetching trending topics... Please wait..");
+                                Send(client, "Fetching trending topics... Please wait..", conversationId);
                                 var trnds = (from trend in ctx.Trends
                                              where trend.Type == TrendType.Daily
                                              select trend).ToList();
@@ -232,7 +234,7 @@ namespace MssgsDotNetTest
                                         c++;
                                     }
                                     );
-                                Send(client, tweets);
+                                Send(client, tweets, conversationId);
                                 processing = false;
                             }
                             else if (msg.Message.StartsWith("--addtrusted"))
@@ -243,19 +245,19 @@ namespace MssgsDotNetTest
                                 else
                                 {
                                     AddTrusted(nm);
-                                    Send(client, nm + " is now trusted!");
+                                    Send(client, nm + " is now trusted!", conversationId);
                                 }
                             }
                             else if (msg.Message.StartsWith("--rtime "))
                             {
                                 int time = Convert.ToInt32(GetCommandArgs("--rtime", msg.Message));
                                 Program.refreshTime = time;
-                                Send(client, "Refresh time set to " + time);
+                                Send(client, "Refresh time set to " + time, conversationId);
                             }
                             else if (msg.Message == "--rstop")
                             {
                                 if (thread.ThreadState == ThreadState.Stopped)
-                                    Send(client, "Refresh thread has been stopped already :')");
+                                    Send(client, "Refresh thread has been stopped already :')", conversationId);
                                 else
                                 {
                                     try
@@ -263,21 +265,21 @@ namespace MssgsDotNetTest
                                         thread.Abort();
                                     }
                                     catch { }
-                                    Send(client, "Refresh thread stopped.");
+                                    Send(client, "Refresh thread stopped.", conversationId);
                                 }
                             }
                             else if (msg.Message == "--rstart")
                             {
                                 if (thread.ThreadState == ThreadState.Running)
-                                    Send(client, "Refresh thread is already running! :D");
+                                    Send(client, "Refresh thread is already running! :D", conversationId);
                                 else
                                 {
                                     try
                                     {
                                         thread.Start();
                                     }
-                                    catch { Send(client, "Error occured while starting the refresh thread!"); }
-                                    Send(client, "Refresh thread started.");
+                                    catch { Send(client, "Error occured while starting the refresh thread!", conversationId); }
+                                    Send(client, "Refresh thread started.", conversationId);
                                 }
                             }
                             else if (msg.Message.StartsWith("--follow "))
@@ -286,11 +288,11 @@ namespace MssgsDotNetTest
                                 if (newfollow.IsFrikkinEmpty())
                                     return;
                                 if (Program.users.Contains(newfollow))
-                                    Send(client, "I follow " + newfollow + " already ;-)");
+                                    Send(client, "I follow " + newfollow + " already ;-)", conversationId);
                                 else
                                 {
                                     Program.users.Add(newfollow);
-                                    Send(client, "Following " + newfollow + " now :-D");
+                                    Send(client, "Following " + newfollow + " now :-D", conversationId);
                                 }
                             }
                             else if (msg.Message.StartsWith("--feed "))
@@ -301,14 +303,21 @@ namespace MssgsDotNetTest
                                 if (newfeed != Program.feedkeyword)
                                 {
                                     Program.feedkeyword = newfeed;
-                                    Send(client, "Updating tweets with keyword: \"" + newfeed + "\" now!:-)");
+                                    Send(client, "Updating tweets with keyword: \"" + newfeed + "\" now!:-)", conversationId);
                                 }
                             }
                         }
                     }
                 };
-
-            client.AuthUser(name, "http://chinesepaladin.org/images/anigifs/wind1.gif");
+            string[] gifs = new string[6] { 
+                "http://24.media.tumblr.com/tumblr_li5grcKHD41qdcq00o1_500.gif", 
+                "http://i.minus.com/iWtCQkGh1bHY6.gif",
+                "http://i.imgur.com/MqWO9.gif",
+                "http://img.ffffound.com/static-data/assets/6/fe1bfff119ba7a7d6e535ff135b84293de00f9ee_m.gif",
+                "http://img829.imageshack.us/img829/6776/chinaman.gif",
+                "http://25.media.tumblr.com/tumblr_lhinnbLf3V1qe3twro1_500.gif"
+            };
+            client.AuthUser(name, gifs[(new Random()).Next(0,gifs.Length - 1)]);
             while (!client.IsUserAuthenticated)
             {
                 if (show < 100000000)
@@ -327,7 +336,7 @@ namespace MssgsDotNetTest
                 }
             }
             Console.WriteLine("Trying to join conversation: " + conversationId);
-            client.ConversationJoinFailed += (e) =>
+            client.ConversationJoinFailed += (conv, e) =>
                 {
                     Console.WriteLine(e.Message);
                 };
@@ -359,7 +368,8 @@ namespace MssgsDotNetTest
                 }
             }
             Console.WriteLine("Joined!");
-            Send(client, "Hello!");
+            
+            Send(client, "Hello!", conversationId);
             Console.WriteLine("Enter a name to add to the whitelist or skip..");
             string white = Console.ReadLine();
             if (!white.IsFrikkinEmpty())
@@ -371,6 +381,16 @@ namespace MssgsDotNetTest
                 var text = Console.ReadLine();
                 if (text == "/close")
                     break;
+                if (text == "/users")
+                {
+                    foreach (var user in client.GetConversation(conversationId).GetUsers())
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("Username: {0}", user.Name);
+                        Console.WriteLine("Op: {0}", user.Op);
+                        Console.WriteLine("Globalop: {0}", user.GlobalOp);
+                    }
+                }
                 else if (text.StartsWith("/join "))
                 {
                     if (client.InConversation)
@@ -381,7 +401,7 @@ namespace MssgsDotNetTest
                     string ch = GetCommandArgs("/join", text);
                     if (ch == "old")
                         ch = conversationId;
-                    client.Join(ch, "BQAJvj5a4qMSSVj6");
+                    client.Join(ch);
                 }
                 else if (text.StartsWith("/trusted "))
                 {
@@ -402,9 +422,9 @@ namespace MssgsDotNetTest
                     Console.WriteLine(GetUnixTime() - Program.lastTime >= Program.refreshTime);
                 }
                 else
-                    Send(client, text);
+                    Send(client, text, conversationId);
             }
-            Send(client, "I'm killing the connection, bai.");
+            Send(client, "I'm killing the connection, bai.", conversationId);
             Console.WriteLine("Closing connection");
             client.Close();
             Console.WriteLine("Connection closed");
@@ -446,13 +466,13 @@ namespace MssgsDotNetTest
             Program.reactions.Add(keywords.Trim(), reaction);
         }
 
-        public static void Send(MssgsClient client, string str)
+        public static void Send(MssgsClient client, string str, string cid)
         {
             if (Program.lastMessage == str)
             {
-                Send(client, "Not repeating \"" +str +  "\", oh I just did! -.-");
+                Send(client, "Not repeating \"" +str +  "\", oh I just did! -.-", cid);
             }
-            client.Send(str);
+            client.Send(str, cid);
             Program.lastMessage = str;
         }
 

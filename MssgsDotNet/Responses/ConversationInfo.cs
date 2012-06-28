@@ -7,16 +7,14 @@ namespace MssgsDotNet.Responses
 {
     public class ConversationInfo : MssgsResponse
     {
-        public bool ReadOnly { get; private set; }
-        public bool PasswordProtected { get; private set; }
-        public bool Exists { get; private set; }
+        public string ConversationId { get; set; }
+        public bool ReadOnly { get; set; }
+        public bool PasswordProtected { get; set; }
+        public bool Exists { get; set; }
+        public bool SocialAuth { get; set; }
+        public bool RobotPassword { get; set; }
+        public bool Channel { get; set; }
 
-        public ConversationInfo(bool passwordProtected, bool readOnly, bool exists)
-        {
-            this.PasswordProtected = passwordProtected;
-            this.ReadOnly = readOnly;
-            this.Exists = exists;
-        }
 
     }
 }
