@@ -11,7 +11,7 @@ namespace MssgsDotNetTest
 {
     public class Program
     {
-        public static AppCredentials creds = new AppCredentials("f280048c06a76dd05ad2e41d94caedbb", "OJkIxPHgv4vI");
+        public static AppCredentials creds = new AppCredentials(String.Empty, String.Empty);
         public static List<string> trusted = new List<string>();
         public static Dictionary<string, string> reactions = new Dictionary<string, string>();
         public static string lastMessage = "";

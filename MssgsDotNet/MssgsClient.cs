@@ -351,6 +351,7 @@ namespace MssgsDotNet
                             }
                             readThread.Abort();
                         }
+                        stream.Close();
                     }
                 }
              );
